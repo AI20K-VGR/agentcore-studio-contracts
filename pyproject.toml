@@ -1,7 +1,7 @@
 [project]
 name = "agentcore-studio-contracts"
 version = "0.1.0"
-description = "AgentCore Studio — frozen pydantic contracts (recipe/trace-event/kb.search/scorecard). Owner: mentor/shared (2-approval on change)."
+description = "AgentCore Studio — frozen pydantic contracts (recipe/trace-event/kb.search/scorecard). Owner: mentor/shared (requires mentor approval on change)."
 requires-python = ">=3.14"
 dependencies = [
     "pydantic>=2.10",
