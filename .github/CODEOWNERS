@@ -1,0 +1,36 @@
+# CODEOWNERS — makes "giữ bút" (authorship) a HARD required-reviewer gate on the
+# shared bottom-layer contracts, instead of honor-system (Hole B enforcement).
+#
+# ┌─ STATUS: write granted 2026-07-22 · branch protection PENDING Pro (2026-07-23) ┐
+# │ ⚠ OPEN WINDOW: all 4 bút-holders have WRITE on this repo as of 2026-07-22, but │
+# │   branch protection is NOT yet active (needs GitHub Pro, landing 2026-07-23). │
+# │   Until protection lands, `main` is UNGUARDED — a code owner can push straight. Keep │
+# │   contract changes OFF `main` until then (freeze ceremony is D11 anyway).     │
+# │                                                                               │
+# │ Owner write-grants (each bút-holder needs WRITE or CODEOWNERS ignores them):  │
+# │   ✅ DE   DongAnh2704   (granted 2026-07-22)                                   │
+# │   ⏳ SWE  Dozyboy · AIE-1 TranBaDat2607 · AIE-2 dholmes0207 — grant when they  │
+# │      first touch their contract file:                                         │
+# │      gh api -X PUT \                                                           │
+# │        repos/AI20K-VGR/agentcore-studio-contracts/collaborators/<handle> \     │
+# │        -f permission=push                                                      │
+# │                                                                               │
+# │ TOMORROW, once Pro is active, set on `main` (this closes the window):         │
+# │   - Require a pull request before merging                                     │
+# │   - Require approvals: 4   (INV-5 mini-RFC 4-signature freeze rule)            │
+# │   - Require review from Code Owners                                            │
+# │   - Block direct push + force-push                                             │
+# └───────────────────────────────────────────────────────────────────────────────┘
+
+# --- per-contract bút (owner-of-record), handles from team-roster.md ---
+/src/studio_contracts/trace.py       @DongAnh2704    # trace-event schema  (§3.2, DE)
+/src/studio_contracts/kb.py          @DongAnh2704    # kb.search API       (§3.3, DE)
+/src/studio_contracts/scorecard.py   @dholmes0207    # scorecard format    (§3.4, AIE-2)
+/src/studio_contracts/recipe.py      @Dozyboy        # recipe schema       (§3.1, SWE)
+/src/studio_contracts/nodes.py       @TranBaDat2607  # 6 node-type surface (AIE-1)
+
+# --- shared seams: multiple consumers, mentor is the tie-breaker ---
+/src/studio_contracts/protocols.py   @hieubui2409    # Embedding/LLM(AIE-1) + TraceWriter(DE) — cross-owner
+
+# --- everything else in the shared bottom layer -> mentor ---
+*                                    @hieubui2409
