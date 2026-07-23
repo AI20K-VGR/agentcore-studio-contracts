@@ -14,6 +14,7 @@ NotImplementedError here.
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -24,7 +25,7 @@ class KbSearchResultItem(BaseModel):
     chunk_id: str
     text: str
     score: float
-    tenant: str
+    tenant_id: UUID
     section_role: str
 
 
@@ -35,7 +36,7 @@ class KbSearch(Protocol):
     async def search(
         self,
         query: str,
-        tenant: str,
+        tenant_id: UUID,
         section_roles: list[str],
         top_k: int,
     ) -> list[KbSearchResultItem]: ...

@@ -12,9 +12,13 @@ real freeze later is a no-op):
 
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 from studio_contracts import KbSearchResultItem
+
+ANKOR_ID = UUID("a0000000-0000-0000-0000-000000000001")
 
 
 def test_frozen_rejects_mutation() -> None:
@@ -22,7 +26,7 @@ def test_frozen_rejects_mutation() -> None:
         chunk_id="chunk-1",
         text="t",
         score=0.5,
-        tenant="ankor",
+        tenant_id=ANKOR_ID,
         section_role="public",
     )
     with pytest.raises(ValidationError):
@@ -34,7 +38,7 @@ def test_required_add_breaks_old_payload() -> None:
         "chunk_id": "chunk-1",
         "text": "t",
         "score": 0.5,
-        "tenant": "ankor",
+        "tenant_id": str(ANKOR_ID),
         "section_role": "public",
     }
 
@@ -44,9 +48,23 @@ def test_required_add_breaks_old_payload() -> None:
         chunk_id: str
         text: str
         score: float
-        tenant: str
+        tenant_id: UUID
         section_role: str
         new_required_field: str  # simulated breaking required-add
 
     with pytest.raises(ValidationError):
         KbSearchResultItemWithRequiredAdd.model_validate(old_payload)
+
+
+def test_tenant_id_rejects_non_uuid() -> None:
+    """D-13 / DEC-B: tenant_id is a strict UUID — a slug like "ankor" (the old
+    wire value) must now be REJECTED, proving identity is the immutable id and
+    not a human-collidable name."""
+    with pytest.raises(ValidationError):
+        KbSearchResultItem(
+            chunk_id="chunk-1",
+            text="t",
+            score=0.5,
+            tenant_id="ankor",  # type: ignore[arg-type]
+            section_role="public",
+        )

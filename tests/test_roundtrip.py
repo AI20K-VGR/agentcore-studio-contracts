@@ -11,6 +11,8 @@ the by-name direction proves `populate_by_name=True` actually works.
 
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 from studio_contracts import (
@@ -33,11 +35,14 @@ from studio_contracts import (
 )
 from studio_contracts.trace import Tokens
 
+# Immutable tenant UUID (D-13) standing in for the human name "ankor".
+ANKOR_ID = UUID("a0000000-0000-0000-0000-000000000001")
+
 
 def _sample_recipe() -> Recipe:
     return Recipe(
         agent_id="agent-1",
-        tenant="ankor",
+        tenant_id=ANKOR_ID,
         agent_config=AgentConfig(
             instructions="Answer from KB only.",
             model="gpt-4o-mini",
@@ -61,7 +66,7 @@ def _sample_trace_event() -> TraceEvent:
         event_id="evt-1",
         run_id="run-1",
         agent_id="agent-1",
-        tenant="ankor",
+        tenant_id=ANKOR_ID,
         node_id="n1",
         node_type=NodeType.KB_RETRIEVE,
         ts="2026-07-17T00:00:00Z",
@@ -78,7 +83,7 @@ def _sample_kb_result() -> KbSearchResultItem:
         chunk_id="chunk-1",
         text="Some retrieved text.",
         score=0.87,
-        tenant="ankor",
+        tenant_id=ANKOR_ID,
         section_role="public",
     )
 
@@ -156,7 +161,7 @@ def test_schema_version_present_and_format() -> None:
     from studio_contracts import SCHEMA_VERSION
 
     assert isinstance(SCHEMA_VERSION, str)
-    assert SCHEMA_VERSION == "0.1.0-draft"
+    assert SCHEMA_VERSION == "0.2.0-draft"
 
 
 def test_additive_optional_field_does_not_break_old_roundtrip() -> None:
@@ -174,7 +179,7 @@ def test_additive_optional_field_does_not_break_old_roundtrip() -> None:
         chunk_id: str
         text: str
         score: float
-        tenant: str
+        tenant_id: UUID
         section_role: str
         new_optional_field: str | None = None
 

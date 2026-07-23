@@ -7,6 +7,8 @@ dashboard) — a mismatch there is a bug in a consumer, not in this contract.
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict
 
 from studio_contracts.nodes import NodeType
@@ -25,7 +27,7 @@ class TraceEvent(BaseModel):
     event_id: str
     run_id: str
     agent_id: str
-    tenant: str  # NOT NULL, INV-1
+    tenant_id: UUID  # NOT NULL, INV-1
     node_id: str
     node_type: NodeType
     ts: str  # iso8601, monotonic within a run

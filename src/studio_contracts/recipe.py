@@ -16,6 +16,8 @@ either the field name (`from_=...`) or the wire alias (`from=...`).
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from studio_contracts.nodes import NodeType
@@ -84,7 +86,7 @@ class Recipe(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     agent_id: str
-    tenant: str
+    tenant_id: UUID
     agent_config: AgentConfig
     dag: Dag
     kb_binding: KbBinding
