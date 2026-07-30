@@ -65,6 +65,6 @@ def test_tenant_id_rejects_non_uuid() -> None:
             chunk_id="chunk-1",
             text="t",
             score=0.5,
-            tenant_id="ankor",  # type: ignore[arg-type]
+            tenant_id="ankor",
             section_role="public",
         )
