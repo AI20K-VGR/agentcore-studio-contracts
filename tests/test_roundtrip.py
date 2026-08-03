@@ -164,6 +164,38 @@ def test_schema_version_present_and_format() -> None:
     assert SCHEMA_VERSION == "0.2.0-draft"
 
 
+def test_case_result_judge_none_for_unjudged_case() -> None:
+    """D11 (Q1, evalhub docs/scorecard-v0.md §3): `CaseResult.judge` must
+    accept `None` for exact-match/refusal cases (no LLM-judge ran) — this is
+    the ONLY honest value pre-S3, since a placeholder `Judge(...)` would be
+    indistinguishable from a real 100%-agreement judge run downstream."""
+    result = CaseResult(
+        case_id="case-1",
+        expected="A",
+        actual="A",
+        success=True,
+        citation_accuracy=1.0,
+        judge=None,
+    )
+    assert result.judge is None
+    _assert_roundtrip_both_directions(result)
+
+
+def test_case_result_with_real_judge_still_works() -> None:
+    """Loosening `judge` to optional must not affect a producer that DOES
+    pass a real `Judge` (old caller / S3 LLM-judge case) — same object as
+    before this change, unaffected."""
+    result = CaseResult(
+        case_id="case-1",
+        expected="A",
+        actual="A",
+        success=True,
+        citation_accuracy=1.0,
+        judge=Judge(label="pass", agreement=0.95),
+    )
+    assert result.judge == Judge(label="pass", agreement=0.95)
+
+
 def test_additive_optional_field_does_not_break_old_roundtrip() -> None:
     """Additive-only smoke: an OPTIONAL field added to a contract must not
     break validating an old payload that predates the field (forward-compat).
