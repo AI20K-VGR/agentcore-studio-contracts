@@ -185,3 +185,32 @@ def test_additive_optional_field_does_not_break_old_roundtrip() -> None:
 
     restored = KbSearchResultItemV2.model_validate(old_payload)
     assert restored.new_optional_field is None
+
+
+def test_scorecard_recipe_hash_optional_old_payload_still_validates() -> None:
+    """D11 (ruling D-24, `02-MATRIX.md:284`) — `Scorecard.recipe_hash` is
+    additive-OPTIONAL, so a pre-D11 `Scorecard` payload (no `recipe_hash` key
+    at all) must still validate, and read back as `None`.
+
+    This is the direction that proves "not breaking": old producer -> new
+    schema. The breaking counter-direction (required-add) is pinned in
+    test_freeze_guard.py::test_required_add_breaks_old_payload. Together they
+    are why this change does NOT bump `SCHEMA_VERSION`.
+
+    `None` is not a benign default: publish MUST read it as "cannot verify
+    which recipe this scorecard certifies => REFUSE" (fail-closed). The safety
+    lives in the consumer, which is exactly why OPTIONAL is sufficient here.
+    """
+    old_payload = _sample_scorecard().model_dump(mode="json")
+    del old_payload["recipe_hash"]
+    assert "recipe_hash" not in old_payload
+
+    restored = Scorecard.model_validate(old_payload)
+
+    assert restored.recipe_hash is None
+    _assert_roundtrip_both_directions(restored)
+
+    # ...and a producer that DOES supply it round-trips unchanged.
+    with_hash = _sample_scorecard().model_copy(update={"recipe_hash": "sha256:deadbeef"})
+    assert with_hash.recipe_hash == "sha256:deadbeef"
+    _assert_roundtrip_both_directions(with_hash)
