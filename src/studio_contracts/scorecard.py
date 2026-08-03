@@ -87,6 +87,6 @@ class Scorecard(BaseModel):
     though `wb.recipe_versions` already exists
     (`studio_workbench/schema.py:39`). How the value is derived is a joint
     decision with SWE (pen of `Recipe`) — tracked in
-    `agentcore-studio-kit/docs/decisions/scorecard.md` as `DEC-03`, owner SWE,
+    `agentcore-studio-evalhub/docs/decisions/scorecard.md` as `DEC-03`, owner SWE,
     due D12. Until a producer exists every real `Scorecard` carries `None`,
     and the fail-closed rule above is what keeps that honest."""
