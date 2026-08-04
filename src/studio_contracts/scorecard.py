@@ -76,3 +76,30 @@ class Scorecard(BaseModel):
     results: list[CaseResult]
     aggregate: Aggregate
     gate: Gate
+    recipe_hash: str | None = None
+    """Hash of the EXACT recipe revision this scorecard was produced from.
+
+    Answers the only question that makes a stored verdict trustworthy later:
+    *"which recipe does this PASS actually certify?"* Without it, a scorecard
+    and a recipe can drift apart silently and `gate.verdict` becomes a claim
+    about nothing in particular.
+
+    **Consumer rule — fail-closed.** Publish MUST treat `recipe_hash is None`
+    as *"cannot verify which recipe this certifies ⇒ REFUSE"*, never as
+    *"probably fine"*. Because the safety lives in the consumer, an OPTIONAL
+    field is sufficient here — a required-add would be a breaking change
+    (`__init__.py:5-12`) for zero extra safety.
+
+    D11 (ruling D-24, `docs/requirements/00-orientation/02-MATRIX.md:284`:
+    *"Fix the schemas before Day 20, then write the tests. Add `recipe_hash`
+    to `Scorecard`"*, owner AIE-2). Landed as additive-optional, so no
+    `SCHEMA_VERSION` bump.
+
+    **Known gap, stated rather than hidden:** this field currently has NO
+    producer. `Recipe` has no `version`/hash field (`recipe.py:79-94`) even
+    though `wb.recipe_versions` already exists
+    (`studio_workbench/schema.py:39`). How the value is derived is a joint
+    decision with SWE (pen of `Recipe`) — tracked in
+    `agentcore-studio-evalhub/docs/decisions/scorecard.md` as `DEC-03`, owner SWE,
+    due D12. Until a producer exists every real `Scorecard` carries `None`,
+    and the fail-closed rule above is what keeps that honest."""
