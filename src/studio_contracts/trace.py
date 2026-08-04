@@ -35,4 +35,11 @@ class TraceEvent(BaseModel):
     outputs: dict[str, object]
     tokens: Tokens
     cost: float
-    citations: list[str] | None = None  # from kb-retrieve
+    citations: list[str] | None = None
+    """Chunk ids the answer actually GROUNDS on — set by the `llm-step` node's event only.
+    `kb-retrieve`'s own event must always leave this `None` (its retrieved chunks live in
+    `outputs["chunks"]` instead): "retrieved" (kb-retrieve, scope-filtered, may be irrelevant)
+    and "cited/grounded" (llm-step, what the answer actually used) are different facts, and
+    citation-accuracy / leak-check scoring (evalhub) depends on this field carrying only the
+    latter. D11 decision: this replaces a stale `# from kb-retrieve` comment that did not match
+    actual interpreter (AIE-1) behavior — see agentcore-studio-kit issue #84 decision-log."""
