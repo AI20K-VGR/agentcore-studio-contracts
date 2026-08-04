@@ -27,7 +27,20 @@ class CaseResult(BaseModel):
     actual: str
     success: bool
     citation_accuracy: float
-    judge: Judge
+    judge: Judge | None = None
+    """`None` when this case was scored WITHOUT an LLM-judge (exact-match /
+    refusal cases — the only kind that exist pre-S3). This must stay `None`
+    rather than a constant placeholder `Judge(...)`: `judge.py` requires every
+    `Judge.agreement` to be a real agreement score against a hand label
+    (R-SPEC A7) — a placeholder value would be indistinguishable from a real
+    100%-agreement judge run and silently corrupt any later aggregate over
+    `agreement` (INV-4 agreement-check). `Judge` stays required-shaped
+    (label + agreement) for the S3 case where a real judge DID run.
+
+    D11 decision (Q1, evalhub `docs/scorecard-v0.md` §3): loosening an
+    existing required field to optional is backward-compatible for every
+    existing producer (anyone already passing a real `Judge` is unaffected),
+    so this is additive, not a SCHEMA_VERSION-bump-worthy break."""
 
 
 class Aggregate(BaseModel):
