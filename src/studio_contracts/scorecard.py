@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Judge(BaseModel):
@@ -82,7 +82,7 @@ class Aggregate(BaseModel):
     The denominator itself travels next to this number as
     `n_scored_citation` — read the two together, never this one alone."""
 
-    n_scored_citation: int | None = None
+    n_scored_citation: int | None = Field(default=None, ge=0)
     """How many cases the `citation_accuracy` mean was actually taken over — the
     denominator, carried explicitly instead of left to the reader to guess.
 
@@ -111,6 +111,41 @@ class Aggregate(BaseModel):
     assuming a value that did not exist. This is the plain additive case
     `__init__.py:5-12` allows without a bump — not the fourth shape."""
 
+    @model_validator(mode="after")
+    def _rate_and_denominator_must_agree(self) -> Aggregate:
+        """A rate and its denominator must tell the same story.
+
+        Two symmetric lies, each a different way of misreporting one division:
+
+        - `citation_accuracy is None` (never measured) while claiming a
+          non-empty denominator — the axis cannot be both unmeasured and
+          measured over 25 cases.
+        - a real rate while claiming an empty denominator — a number divided by
+          nothing.
+
+        `n_scored_citation is None` stays legal with any rate: the absence of a
+        count contradicts nothing, it is simply not carried (see the field
+        docstring). Only a denominator that IS present can disagree.
+
+        **This rejects nothing that used to validate.** Both forbidden states
+        need `citation_accuracy = None` or `n_scored_citation = 0`, and neither
+        was representable before this change — the field did not exist and the
+        rate was a plain `float`. The constraint fences off newly reachable
+        states, so it is not a breaking tightening of an existing shape."""
+        if self.n_scored_citation is None:
+            return self
+        if self.citation_accuracy is None and self.n_scored_citation > 0:
+            raise ValueError(
+                f"citation_accuracy=None (trục chưa đo) nhưng n_scored_citation="
+                f"{self.n_scored_citation} — mẫu số > 0 nghĩa là ĐÃ đo. Mẫu số rỗng phải là 0."
+            )
+        if self.citation_accuracy is not None and self.n_scored_citation == 0:
+            raise ValueError(
+                f"citation_accuracy={self.citation_accuracy} nhưng n_scored_citation=0 — "
+                "một tỷ lệ chia cho không. Mẫu số rỗng ⇒ citation_accuracy phải là None."
+            )
+        return self
+
 
 class GateThreshold(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -138,6 +173,38 @@ class Scorecard(BaseModel):
     results: list[CaseResult]
     aggregate: Aggregate
     gate: Gate
+
+    @model_validator(mode="after")
+    def _unmeasured_axis_cannot_pass(self) -> Scorecard:
+        """An axis that was never measured MUST NOT carry `verdict = "PASS"`.
+
+        `DEC-D16-03` states this, and `INV-6` makes `verdict` a hard cut for
+        Publish rather than advice — so *"not estimable"* reaching a consumer as
+        PASS is the failure mode with real blast radius, not a cosmetic one.
+
+        **Why it lives on `Scorecard` and not on `Aggregate`.** The invariant
+        spans two frozen models: the measurement is in `aggregate`, the decision
+        is in `gate`. Neither can see the other, which is exactly how a scorecard
+        reading *"citation was never measured"* next to *"gate PASSED"* was able
+        to validate cleanly. `Scorecard` is the first scope that holds both.
+
+        **Deliberately one-directional.** `FAIL` with a measured axis stays
+        legal: a run fails for reasons that have nothing to do with this axis
+        (`success_rate` below threshold, and later gates). This rejects only the
+        combination *unmeasured + PASS* — it does not turn the contract into a
+        second place that decides verdicts. `compute_scorecard` remains the only
+        thing that DECIDES; this is a floor under the result, not a duplicate of
+        the policy.
+
+        **Rejects nothing that used to validate:** `citation_accuracy = None`
+        became representable in this same change."""
+        if self.aggregate.citation_accuracy is None and self.gate.verdict == "PASS":
+            raise ValueError(
+                "aggregate.citation_accuracy=None (trục chưa đo được) nhưng gate.verdict='PASS' — "
+                "không đo được thì không PASS được (DEC-D16-03; INV-6 coi verdict là cổng cứng)."
+            )
+        return self
+
     recipe_hash: str | None = None
     """Hash of the EXACT recipe revision this scorecard was produced from.
 
