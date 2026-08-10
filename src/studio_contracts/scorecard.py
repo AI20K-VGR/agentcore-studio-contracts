@@ -79,10 +79,37 @@ class Aggregate(BaseModel):
     change. The condition is met **by fixing the reader**, not by declaring it
     absent.
 
-    **Known gap:** the denominator itself (`n_scored_citation`) is not carried
-    here yet, so a consumer still cannot tell whether a `0.90` was measured over
-    22 cases or 30 — tracked as `DEC-D16-03` in
-    `agentcore-studio-evalhub/docs/decisions/scorecard.md`, owner AIE-2."""
+    The denominator itself travels next to this number as
+    `n_scored_citation` — read the two together, never this one alone."""
+
+    n_scored_citation: int | None = None
+    """How many cases the `citation_accuracy` mean was actually taken over — the
+    denominator, carried explicitly instead of left to the reader to guess.
+
+    **Why a rate alone is malformed evidence.** `citation_accuracy = 0.90` is a
+    different claim over 22 cases than over 30, and nothing else on `Scorecard`
+    recovers which one it was: `len(results)` counts ALL cases, and the refusal
+    cases excluded by `DEC-04` are not marked in a way `Aggregate` can see. A
+    consumer reading a rate without its `n` is doing exactly what `kit#134`
+    classifies as malformed evidence — reporting a proportion whose sample size
+    is unrecoverable.
+
+    **`0` and `None` mean different things, and neither means "fine".**
+
+    - `0`    — the denominator was computed and it was empty (every case was a
+               refusal). Pairs with `citation_accuracy = None`; the axis was
+               never measured, and `DEC-D16-03` requires `gate.verdict = "FAIL"`
+               alongside it. Not estimable is not a PASS.
+    - `None` — this producer did not carry the denominator at all (a payload
+               written before this field existed). Absence of a count, not a
+               count of zero. A consumer MUST NOT read it as `0`, and MUST NOT
+               present a rate as trustworthy on the strength of it.
+
+    **Additive-optional, so no `SCHEMA_VERSION` bump.** Unlike the widening on
+    `citation_accuracy` above, this is a new OPTIONAL field: every payload
+    written before it still validates unchanged, and no reader can have been
+    assuming a value that did not exist. This is the plain additive case
+    `__init__.py:5-12` allows without a bump — not the fourth shape."""
 
 
 class GateThreshold(BaseModel):
