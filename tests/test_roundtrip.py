@@ -246,3 +246,67 @@ def test_scorecard_recipe_hash_optional_old_payload_still_validates() -> None:
     with_hash = _sample_scorecard().model_copy(update={"recipe_hash": "sha256:deadbeef"})
     assert with_hash.recipe_hash == "sha256:deadbeef"
     _assert_roundtrip_both_directions(with_hash)
+
+
+# ── Aggregate trục citation — shape mới (DEC-D16-03), review AIE-1 trên contracts#5 ──────────────
+#
+# Vì sao ba bài này sống ở ĐÂY chứ không chỉ ở evalhub: `reusable-domain-ci.yml:100` chỉ chạy
+# `pytest <domain_path>/tests`, nên CI của repo này KHÔNG bao giờ chạy test của consumer. Không có ba
+# bài dưới thì CI xanh ở đây chỉ chứng minh **usage cũ vẫn validate** — không chứng minh shape mới
+# hoạt động, và bằng chứng đó nằm hết ở một PR chưa merge của repo khác.
+
+
+def _scorecard(*, citation_accuracy: float | None, n_scored: int | None, verdict: str) -> Scorecard:
+    return Scorecard(
+        agent_id="a",
+        golden_set_ref="g",
+        results=[CaseResult(case_id="C-1", expected="x", actual="x", success=True, citation_accuracy=1.0)],
+        aggregate=Aggregate(success_rate=1.0, citation_accuracy=citation_accuracy, n_scored_citation=n_scored),
+        gate=Gate(threshold=GateThreshold(success=0.9, citation_accuracy=0.95), verdict=verdict),
+    )
+
+
+def test_truc_chua_do_duoc_khong_the_mang_verdict_PASS() -> None:
+    """`citation_accuracy is None` (trục chưa đo) + `verdict = "PASS"` ⇒ `ValidationError`.
+
+    Đây là bất biến mà cả `DEC-D16-03` lẫn docstring của field đều KHAI, và trước bài này không gì
+    cưỡng chế nó: hai model `Aggregate`/`Gate` tách rời, không validator nào bắc qua. Một scorecard
+    *"trục citation chưa từng đo, nhưng gate PASS"* validate sạch — đúng lớp **vacuous PASS** mà việc
+    nới `float | None` sinh ra để đóng, chỉ dời từ *"số sai"* sang *"số đúng, không có lưới"*.
+
+    Ràng buộc này KHÔNG loại payload cũ nào: trước khi nới kiểu, `citation_accuracy = None` **không
+    biểu diễn được** (`float`), nên trạng thái bị cấm ở đây chưa từng hợp lệ."""
+    with pytest.raises(ValidationError):
+        _scorecard(citation_accuracy=None, n_scored=0, verdict="PASS")
+
+    # Đối trọng: cùng trạng thái chưa-đo, verdict FAIL ⇒ hợp lệ. Thiếu vế này thì bài trên vẫn xanh
+    # với một model cấm `None` bằng mọi giá — tức cấm luôn thứ PR này sinh ra để cho phép.
+    assert _scorecard(citation_accuracy=None, n_scored=0, verdict="FAIL").gate.verdict == "FAIL"
+
+
+def test_mau_so_va_ty_le_phai_ke_cung_mot_cau_chuyen() -> None:
+    """`n_scored_citation` và `citation_accuracy` không được mâu thuẫn nhau.
+
+    Hai ca đối xứng, mỗi ca là một cách nói dối khác nhau về cùng một phép chia:
+
+    - `None` + mẫu số `> 0` — *"chưa đo được"* trong khi khai đã chấm 25 case. Đây là ca phản chứng
+      AIE-1 dựng ở review contracts#5.
+    - số thật + mẫu số `0` — một tỷ lệ chia cho không.
+
+    `n_scored_citation = None` (producer cũ không mang) **vẫn hợp lệ với mọi tỷ lệ**: vắng mặt một
+    phép đếm không mâu thuẫn với gì cả, nó chỉ là chưa biết."""
+    with pytest.raises(ValidationError):
+        _scorecard(citation_accuracy=None, n_scored=25, verdict="FAIL")
+
+    with pytest.raises(ValidationError):
+        _scorecard(citation_accuracy=0.85, n_scored=0, verdict="FAIL")
+
+    assert _scorecard(citation_accuracy=0.85, n_scored=None, verdict="FAIL").aggregate.n_scored_citation is None
+
+
+def test_mau_so_am_bi_tu_choi() -> None:
+    """`n_scored_citation` là một phép đếm ⇒ không âm. Producer duy nhất hôm nay tính bằng `len()`
+    nên không sinh được số âm, nhưng kiểu `int | None` một mình không nói ra điều đó — và contract
+    là chỗ nói ra, không phải chỗ tin producer."""
+    with pytest.raises(ValidationError):
+        _scorecard(citation_accuracy=0.85, n_scored=-1, verdict="FAIL")
