@@ -47,7 +47,42 @@ class Aggregate(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     success_rate: float
-    citation_accuracy: float
+    citation_accuracy: float | None
+    """Mean citation accuracy over the ANSWER-branch cases only — `None` when
+    that denominator does not exist.
+
+    **What question this answers:** *"of the cases where citing something was
+    the correct behaviour, how much of the expected evidence did the agent
+    actually retrieve?"* Refusal cases are excluded from the denominator by
+    `DEC-04`: they carry a pinned `citation_accuracy = 1.0` as a
+    **vacuous-truth convention**, not as a measurement, and folding that
+    convention into the mean silently inflates the score. Measured cost of
+    getting this wrong: a 10-case set reported `0.90` where the true value was
+    `0.833`, and `10×1.0 + 20×0.85` lands on exactly `0.90` — i.e. a run that
+    should FAIL passes a `0.9` threshold.
+
+    **Consumer rule — `None` is not zero and not "fine".** `None` means the
+    denominator was empty (every case was a refusal), so this axis was never
+    measured. `DEC-D16-03`: an unmeasured axis MUST NOT produce a PASS —
+    `compute_scorecard` emits `gate.verdict = "FAIL"` alongside it. Renderers
+    must print something that reads as *not estimable*, never `0.00`: a
+    formatted `0.00` is indistinguishable from a real measurement of zero, and
+    `0/0` invites the reader to perform a division that does not exist.
+
+    **Why widening to `float | None` is not a `SCHEMA_VERSION` bump.**
+    `__init__.py:5-12` lists three breaking shapes (rename · removal ·
+    required-add); this is the fourth shape `DEC-01` names — *compatible on the
+    wire, NOT compatible with readers*. `DEC-01` allows no bump on the
+    condition that zero readers assume non-null. That condition was checked, not
+    asserted: one real reader existed
+    (`studio_evalhub/render.py` formatting `:.2f`) and it is patched in the same
+    change. The condition is met **by fixing the reader**, not by declaring it
+    absent.
+
+    **Known gap:** the denominator itself (`n_scored_citation`) is not carried
+    here yet, so a consumer still cannot tell whether a `0.90` was measured over
+    22 cases or 30 — tracked as `DEC-D16-03` in
+    `agentcore-studio-evalhub/docs/decisions/scorecard.md`, owner AIE-2."""
 
 
 class GateThreshold(BaseModel):
