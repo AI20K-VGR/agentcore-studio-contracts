@@ -148,10 +148,23 @@ class Aggregate(BaseModel):
 
 
 class GateThreshold(BaseModel):
+    """Ngưỡng đã dùng để ra `verdict`, ghi lại cùng verdict.
+
+    `ge=0.0, le=1.0`: cả hai vế so sánh ở `compute_scorecard` là tỷ lệ trong
+    `[0, 1]`, nên một ngưỡng ngoài khoảng không phải "khắt khe" hay "lỏng" —
+    nó vô nghĩa, và `success_rate >= -999` đúng với mọi agent kể cả agent hỏng
+    toàn tập. Biên `0.0`/`1.0` VẪN hợp lệ (chấp mọi thứ / đòi tuyệt đối) nên
+    là `ge/le`, không phải `gt/lt`.
+
+    Đặt ở contract chứ không ở `compute.py` vì mọi caller đều đi qua đây, kể
+    cả caller không qua route. Bản sinh đôi `ScorecardThreshold` (`recipe.py`,
+    bút SWE) là việc riêng — xem `kit#129` §7 mục 1.
+    """
+
     model_config = ConfigDict(frozen=True)
 
-    success: float
-    citation_accuracy: float
+    success: float = Field(ge=0.0, le=1.0)
+    citation_accuracy: float = Field(ge=0.0, le=1.0)
 
 
 class Gate(BaseModel):
