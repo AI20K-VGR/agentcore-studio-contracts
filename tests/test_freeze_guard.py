@@ -17,6 +17,7 @@ from uuid import UUID
 import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 from studio_contracts import KbSearchResultItem
+from studio_contracts.recipe import ScorecardThreshold
 from studio_contracts.scorecard import GateThreshold
 
 ANKOR_ID = UUID("a0000000-0000-0000-0000-000000000001")
@@ -95,3 +96,21 @@ def test_gate_threshold_accepts_boundaries() -> None:
     là thứ giết mutant `ge→gt` và `le→lt`."""
     for success, citation in ((0.0, 0.0), (1.0, 1.0), (0.9, 0.95)):
         assert GateThreshold(success=success, citation_accuracy=citation).success == success
+
+
+def test_scorecard_threshold_rejects_out_of_range() -> None:
+    """`ScorecardThreshold` là ngưỡng CLIENT khai lúc dựng recipe (`kit#129` §3.1, vấn đề A —
+    bản sinh đôi của `test_gate_threshold_rejects_out_of_range` ở trên, khác model, khác chủ).
+    Trước bản vá: `apps/studio/routes/runs.py` nhận thẳng `success_threshold`/
+    `citation_accuracy_threshold` từ request body, không kiểm gì — `-999` được chấp nhận, MỌI
+    agent qua `POST /api/runs`/`/evaluate`/`/publish` đều "đạt" bất kể chất lượng thật."""
+    for success, citation in ((-999.0, -999.0), (-0.01, 0.5), (0.5, 1.01), (2.0, 0.5)):
+        with pytest.raises(ValidationError):
+            ScorecardThreshold(success=success, citation_accuracy=citation)
+
+
+def test_scorecard_threshold_accepts_boundaries() -> None:
+    """Bất đối xứng có chủ đích, cùng lý do `test_gate_threshold_accepts_boundaries`: `0.0`/`1.0`
+    hợp lệ, giết mutant `ge→gt`/`le→lt`."""
+    for success, citation in ((0.0, 0.0), (1.0, 1.0), (0.9, 0.95)):
+        assert ScorecardThreshold(success=success, citation_accuracy=citation).success == success
