@@ -70,10 +70,24 @@ class KbBinding(BaseModel):
 
 
 class ScorecardThreshold(BaseModel):
+    """Ngưỡng client khai lúc dựng recipe (đối lập `GateThreshold` ở `scorecard.py`, bút AIE-2,
+    ghi lại ngưỡng đã dùng SAU khi verdict đã ra). VinSOC thẩm định (`kit#129` §3.1, vấn đề A):
+    trước bản vá này, `float` trần — client gửi `success_threshold: -999` được server chấp nhận,
+    khiến MỌI agent (kể cả agent hỏng toàn tập) "đạt". `ge=0.0, le=1.0`: cả hai vế so sánh ở
+    `compute_scorecard` là tỷ lệ trong `[0, 1]`, ngưỡng ngoài khoảng không phải "khắt khe"/"lỏng"
+    — nó vô nghĩa. Biên `0.0`/`1.0` VẪN hợp lệ (chấp mọi thứ / đòi tuyệt đối) nên dùng `ge/le`,
+    không phải `gt/lt`.
+
+    Quét toàn workspace trước khi vá (không phải đoán): 0 call-site nào dùng giá trị ngoài
+    `[0.8, 1.0]` — `contracts/tests`, `engine/scripts+tests`, `workbench/builder.py+tests` đều
+    dùng đúng `0.8`/`0.9`/`0.95`. `SCHEMA_VERSION` giữ nguyên (cùng lý do `GateThreshold`,
+    `contracts#6`: breaking-by-mechanism nhưng 0 payload thật nào bị chạm).
+    """
+
     model_config = ConfigDict(frozen=True)
 
-    success: float
-    citation_accuracy: float
+    success: float = Field(ge=0.0, le=1.0)
+    citation_accuracy: float = Field(ge=0.0, le=1.0)
 
 
 class Recipe(BaseModel):
