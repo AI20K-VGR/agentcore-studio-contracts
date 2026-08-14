@@ -17,6 +17,7 @@ from uuid import UUID
 import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 from studio_contracts import KbSearchResultItem
+from studio_contracts.scorecard import GateThreshold
 
 ANKOR_ID = UUID("a0000000-0000-0000-0000-000000000001")
 
@@ -68,3 +69,29 @@ def test_tenant_id_rejects_non_uuid() -> None:
             tenant_id="ankor",
             section_role="public",
         )
+
+
+def test_gate_threshold_rejects_out_of_range() -> None:
+    """`GateThreshold` là ô ghi lại ngưỡng đã dùng để ra `verdict`. Một ngưỡng
+    ngoài `[0, 1]` không phải "ngưỡng khắt khe" hay "ngưỡng lỏng" — nó là một
+    ngưỡng VÔ NGHĨA, và `success_rate >= -999` đúng với mọi agent, kể cả agent
+    hỏng toàn tập. Đo trước khi vá (`compute_scorecard` với 3/3 case
+    `success=False`, `citation_accuracy=0.0`): ngưỡng `(-999, -999)` cho
+    `verdict="PASS"`, cùng dữ liệu với ngưỡng `(0.9, 0.95)` cho `FAIL`.
+
+    Ràng buộc đặt ở contract chứ không ở `compute.py`: mọi caller đều đi qua
+    đây, kể cả caller không qua route (script, `EvalHarness.run` gọi thẳng,
+    producer sau này). Xem `kit#129` (thẩm định VinSOC, vấn đề A) — bản sinh
+    đôi ở `ScorecardThreshold` (`recipe.py`, bút SWE) là §7 mục 1, KHÔNG sửa
+    trong PR này để giữ đúng lane."""
+    for success, citation in ((-999.0, -999.0), (-0.01, 0.5), (0.5, 1.01), (2.0, 0.5)):
+        with pytest.raises(ValidationError):
+            GateThreshold(success=success, citation_accuracy=citation)
+
+
+def test_gate_threshold_accepts_boundaries() -> None:
+    """Bất đối xứng có chủ đích với bài trên: `0.0` và `1.0` là ngưỡng HỢP LỆ
+    (chấp mọi thứ / đòi tuyệt đối), không được siết nhầm thành `gt/lt`. Bài này
+    là thứ giết mutant `ge→gt` và `le→lt`."""
+    for success, citation in ((0.0, 0.0), (1.0, 1.0), (0.9, 0.95)):
+        assert GateThreshold(success=success, citation_accuracy=citation).success == success
