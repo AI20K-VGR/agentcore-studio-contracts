@@ -44,7 +44,7 @@ def _sample_recipe() -> Recipe:
         agent_id="agent-1",
         tenant_id=ANKOR_ID,
         agent_config=AgentConfig(
-            instructions="Answer from KB only.",
+            system_prompt="Answer from KB only.",
             model="gpt-4o-mini",
             tool_whitelist=["kb_search"],
         ),
@@ -161,7 +161,7 @@ def test_schema_version_present_and_format() -> None:
     from studio_contracts import SCHEMA_VERSION
 
     assert isinstance(SCHEMA_VERSION, str)
-    assert SCHEMA_VERSION == "0.2.0-draft"
+    assert SCHEMA_VERSION == "0.3.0-draft"
 
 
 def test_case_result_judge_none_for_unjudged_case() -> None:

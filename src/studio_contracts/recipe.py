@@ -57,7 +57,7 @@ class Dag(BaseModel):
 class AgentConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    instructions: str
+    system_prompt: str
     model: str
     tool_whitelist: list[str]
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
