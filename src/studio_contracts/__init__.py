@@ -15,6 +15,7 @@ Contracts is the bottom import-layer (see `.importlinter`): this package
 imports pydantic + stdlib typing ONLY — never another `studio_*` package.
 """
 
+from studio_contracts.cost import cost_of
 from studio_contracts.kb import KbSearch, KbSearchResultItem
 from studio_contracts.nodes import NodeType
 from studio_contracts.protocols import LLM, EmbeddingService, TraceWriter
@@ -37,6 +38,7 @@ __all__ = [
     "AgentConfig",
     "Aggregate",
     "CaseResult",
+    "cost_of",
     "Dag",
     "Edge",
     "EmbeddingService",
