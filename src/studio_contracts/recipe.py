@@ -60,6 +60,7 @@ class AgentConfig(BaseModel):
     instructions: str
     model: str
     tool_whitelist: list[str]
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
 
 
 class KbBinding(BaseModel):
