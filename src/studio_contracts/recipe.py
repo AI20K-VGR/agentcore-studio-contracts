@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from studio_contracts.nodes import NodeType
 
@@ -55,16 +55,29 @@ class Dag(BaseModel):
 
 
 class AgentConfig(BaseModel):
-    """`system_prompt` carries `Field(alias="instructions")` + `populate_by_name=True`
-    (same F12 pattern as `Edge.from_`) so recipes already published under the old
-    field name (`wb.recipes`/`wb.recipe_versions`, pre-rename) still validate —
-    `Recipe.model_validate(<old-shape row>)` reads `instructions`, and callers
-    building fresh configs may use either `system_prompt=` or `instructions=`.
+    """`system_prompt` reads EITHER wire name via `validation_alias=AliasChoices(...)`
+    but writes ONLY `system_prompt` — this is deliberately NOT the `Edge.from_`
+    F12 pattern (`Field(alias=...)`), because `alias=` sets both the validation
+    AND serialization alias in pydantic v2: a plain `alias="instructions"` would
+    make `model_dump(by_alias=True)` keep emitting the OLD name forever, silently
+    defeating the rename on every wire boundary (API responses, `wb.recipes`
+    writes) — caught in contracts#14 review round 2 by seeding an old-shape
+    published row and observing `by_alias=True` output still said "instructions".
+
+    Chosen trade-off (DEC-2, `docs/decisions.md` root kit): recipes already
+    published BEFORE this rename landed have `recipe_hash` computed over the
+    OLD wire shape (`{"instructions": ...}`). Since the hash is now computed
+    over `{"system_prompt": ...}` for anything re-hashed, a pre-rename
+    `recipe_hash` no longer re-verifies from a freshly-`model_dump`'d object —
+    `publish.py::rollback()` already carries `history_recipe_hash` forward
+    unchanged instead of recomputing it, so rollback to a pre-rename version
+    still works; anything that DOES recompute-and-compare against a pre-rename
+    hash will not.
     """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
-    system_prompt: str = Field(alias="instructions")
+    system_prompt: str = Field(validation_alias=AliasChoices("system_prompt", "instructions"))
     model: str
     tool_whitelist: list[str]
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)

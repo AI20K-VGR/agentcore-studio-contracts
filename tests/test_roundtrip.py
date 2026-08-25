@@ -144,12 +144,11 @@ def test_agent_config_reads_old_published_instructions_shape() -> None:
     """A recipe published BEFORE the `instructions` -> `system_prompt` rename
     (contracts#14) has `agent_config.instructions` in the DB (`wb.recipes`/
     `wb.recipe_versions`, `jsonb`, never rewritten in place). `system_prompt`
-    carries `Field(alias="instructions")` + `populate_by_name=True` (F12
-    pattern, same as `Edge.from_`) specifically so this old shape still
-    validates — without it, every already-published agent loses `/chat`
+    carries `Field(validation_alias=AliasChoices("system_prompt", "instructions"))`
+    specifically so this old shape still validates — without it, every
+    already-published agent loses `/chat`
     (`apps/studio/routes/chat.py::_load_published_recipe`) and `GET` recipe
-    (`routes/agents.py`), and `recipe_hash` can no longer be recomputed for
-    rollback (`workbench/schema.py`).
+    (`routes/agents.py`).
     """
     old_shape_agent_config = {
         "instructions": "Answer from KB only.",
@@ -166,6 +165,24 @@ def test_agent_config_reads_old_published_instructions_shape() -> None:
         model="gpt-4o-mini",
         tool_whitelist=["kb_search"],
     )
+
+
+def test_agent_config_serializes_only_the_new_name() -> None:
+    """contracts#14 review round 2: a plain `Field(alias="instructions")` sets
+    BOTH the validation alias AND the serialization alias in pydantic v2, so
+    `model_dump(by_alias=True)` kept emitting "instructions" forever — the
+    rename never actually reached the wire (API responses, `wb.recipes`
+    writes), even for brand-new recipes published after the rename landed.
+    `validation_alias=AliasChoices(...)` (no plain `alias=`) is what actually
+    fixes this: read either old-or-new-shape input, but always WRITE the new
+    name. This is the test that would have caught the round-2 finding.
+    """
+    config = AgentConfig(system_prompt="Answer from KB only.", model="gpt-4o-mini", tool_whitelist=["kb_search"])
+
+    dumped = config.model_dump(mode="json", by_alias=True)
+
+    assert "system_prompt" in dumped
+    assert "instructions" not in dumped
 
 
 def test_edge_accepts_alias_and_name() -> None:
