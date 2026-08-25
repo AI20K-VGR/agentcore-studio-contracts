@@ -44,7 +44,7 @@ def _sample_recipe() -> Recipe:
         agent_id="agent-1",
         tenant_id=ANKOR_ID,
         agent_config=AgentConfig(
-            instructions="Answer from KB only.",
+            system_prompt="Answer from KB only.",
             model="gpt-4o-mini",
             tool_whitelist=["kb_search"],
         ),
@@ -140,6 +140,51 @@ def test_scorecard_roundtrip_both_directions() -> None:
     _assert_roundtrip_both_directions(_sample_scorecard())
 
 
+def test_agent_config_reads_old_published_instructions_shape() -> None:
+    """A recipe published BEFORE the `instructions` -> `system_prompt` rename
+    (contracts#14) has `agent_config.instructions` in the DB (`wb.recipes`/
+    `wb.recipe_versions`, `jsonb`, never rewritten in place). `system_prompt`
+    carries `Field(validation_alias=AliasChoices("system_prompt", "instructions"))`
+    specifically so this old shape still validates — without it, every
+    already-published agent loses `/chat`
+    (`apps/studio/routes/chat.py::_load_published_recipe`) and `GET` recipe
+    (`routes/agents.py`).
+    """
+    old_shape_agent_config = {
+        "instructions": "Answer from KB only.",
+        "model": "gpt-4o-mini",
+        "tool_whitelist": ["kb_search"],
+    }
+
+    restored = AgentConfig.model_validate(old_shape_agent_config)
+
+    assert restored.system_prompt == "Answer from KB only."
+    # New producers may build with either name; both must agree with the old row.
+    assert restored == AgentConfig(
+        system_prompt="Answer from KB only.",
+        model="gpt-4o-mini",
+        tool_whitelist=["kb_search"],
+    )
+
+
+def test_agent_config_serializes_only_the_new_name() -> None:
+    """contracts#14 review round 2: a plain `Field(alias="instructions")` sets
+    BOTH the validation alias AND the serialization alias in pydantic v2, so
+    `model_dump(by_alias=True)` kept emitting "instructions" forever — the
+    rename never actually reached the wire (API responses, `wb.recipes`
+    writes), even for brand-new recipes published after the rename landed.
+    `validation_alias=AliasChoices(...)` (no plain `alias=`) is what actually
+    fixes this: read either old-or-new-shape input, but always WRITE the new
+    name. This is the test that would have caught the round-2 finding.
+    """
+    config = AgentConfig(system_prompt="Answer from KB only.", model="gpt-4o-mini", tool_whitelist=["kb_search"])
+
+    dumped = config.model_dump(mode="json", by_alias=True)
+
+    assert "system_prompt" in dumped
+    assert "instructions" not in dumped
+
+
 def test_edge_accepts_alias_and_name() -> None:
     """populate_by_name=True must accept BOTH the alias `from` and the field
     name `from_` when building an Edge directly from a dict.
@@ -161,7 +206,7 @@ def test_schema_version_present_and_format() -> None:
     from studio_contracts import SCHEMA_VERSION
 
     assert isinstance(SCHEMA_VERSION, str)
-    assert SCHEMA_VERSION == "0.2.0-draft"
+    assert SCHEMA_VERSION == "0.3.0-draft"
 
 
 def test_case_result_judge_none_for_unjudged_case() -> None:
