@@ -55,9 +55,16 @@ class Dag(BaseModel):
 
 
 class AgentConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    """`system_prompt` carries `Field(alias="instructions")` + `populate_by_name=True`
+    (same F12 pattern as `Edge.from_`) so recipes already published under the old
+    field name (`wb.recipes`/`wb.recipe_versions`, pre-rename) still validate —
+    `Recipe.model_validate(<old-shape row>)` reads `instructions`, and callers
+    building fresh configs may use either `system_prompt=` or `instructions=`.
+    """
 
-    system_prompt: str
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    system_prompt: str = Field(alias="instructions")
     model: str
     tool_whitelist: list[str]
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)

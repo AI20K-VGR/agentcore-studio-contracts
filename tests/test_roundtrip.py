@@ -140,6 +140,34 @@ def test_scorecard_roundtrip_both_directions() -> None:
     _assert_roundtrip_both_directions(_sample_scorecard())
 
 
+def test_agent_config_reads_old_published_instructions_shape() -> None:
+    """A recipe published BEFORE the `instructions` -> `system_prompt` rename
+    (contracts#14) has `agent_config.instructions` in the DB (`wb.recipes`/
+    `wb.recipe_versions`, `jsonb`, never rewritten in place). `system_prompt`
+    carries `Field(alias="instructions")` + `populate_by_name=True` (F12
+    pattern, same as `Edge.from_`) specifically so this old shape still
+    validates — without it, every already-published agent loses `/chat`
+    (`apps/studio/routes/chat.py::_load_published_recipe`) and `GET` recipe
+    (`routes/agents.py`), and `recipe_hash` can no longer be recomputed for
+    rollback (`workbench/schema.py`).
+    """
+    old_shape_agent_config = {
+        "instructions": "Answer from KB only.",
+        "model": "gpt-4o-mini",
+        "tool_whitelist": ["kb_search"],
+    }
+
+    restored = AgentConfig.model_validate(old_shape_agent_config)
+
+    assert restored.system_prompt == "Answer from KB only."
+    # New producers may build with either name; both must agree with the old row.
+    assert restored == AgentConfig(
+        system_prompt="Answer from KB only.",
+        model="gpt-4o-mini",
+        tool_whitelist=["kb_search"],
+    )
+
+
 def test_edge_accepts_alias_and_name() -> None:
     """populate_by_name=True must accept BOTH the alias `from` and the field
     name `from_` when building an Edge directly from a dict.
