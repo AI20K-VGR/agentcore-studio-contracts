@@ -40,7 +40,13 @@ class Recipe(BaseModel):
 
 ### 2. `kb_binding` hôm nay không phải tham số client — nó bị HARDCODE (chưa nêu trong kit#239)
 
-`packages/workbench/src/studio_workbench/recipe.py:62-96`:
+**Đã vá 2026-08-26** — `agentcore-studio-workbench` PR #50 (CI xanh), độc lập RFC này: `create_recipe()`
+nhận thêm `kb_binding: KbBinding | None = None`, additive-only, không đụng `packages/contracts`, shape
+vẫn số ít như hôm nay. Giữ nguyên đoạn dưới làm hồ sơ — gap này **không còn chặn** phần shape N-KB của
+RFC, nhưng RFC vẫn phải đổi chữ ký `create_recipe`/`agent_shape_lint` sang số nhiều khi Q2 merge (bảng
+"Việc kéo theo" bên dưới).
+
+`packages/workbench/src/studio_workbench/recipe.py:62-96` (trước PR #50):
 
 ```python
 _DEFAULT_KB_ID = "kb-callisto-v1"
@@ -53,7 +59,25 @@ kb_bind = KbBinding(kb_id=_DEFAULT_KB_ID, scope=_DEFAULT_SCOPE)
 nhận `kb_id`/`scope` làm tham số thật, đã bị xoá 2026-08-24, workbench#41/kit#218) — không nhận
 `kb_id`/`scope` từ caller. Nghĩa là **canvas hôm nay không set được KB nào cả**, kể cả 1 cái; mọi
 recipe dựng qua `create_recipe`/`recipe_from_canvas` đều gắn cùng 1 demo KB cố định. RFC không chỉ
-nới kiểu `str` → `list[str]`, mà còn phải **mở lại đường tham số hoá** đã đóng ở workbench#41.
+nới kiểu `str` → `list[str]`, mà còn phải **mở lại đường tham số hoá** đã đóng ở workbench#41 (PR #50
+mở lại cho shape số ít; số nhiều vẫn chờ Q2).
+
+### 3. Default production KHÔNG theo quy ước tự sinh — xung đột thật với "suy ra `golden_set_ref`" (scan 2026-08-26, chưa nêu trong kit#239)
+
+`golden_autogen.py:93` sinh `f"kb-{section_role}-auto-v1"`, nhưng **default đang chạy production
+không theo quy ước đó**:
+
+```
+packages/workbench/src/studio_workbench/recipe.py:77   golden_set_ref: str = "callisto-golden-30-v1"
+apps/studio/src/studio_app/routes/publish.py:82        golden_set_ref: str = "callisto-2.0-golden-30-v1"
+```
+
+`callisto-golden-30-v1`/`callisto-2.0-golden-30-v1` là bộ **viết tay**, có trước `app#61` (golden
+tự sinh theo `section_role`), và đang sống thật trong `test_recipe.py:121`, `test_golden_seed.py:68,80`,
+`test_gate2_*` — không phải mã chết xoá được tuỳ tiện. Nếu `golden_set_ref` bị xoá khỏi `Recipe` và suy
+ra thuần từ `section_role` như đề xuất gốc bên dưới, **mọi recipe dùng default hiện tại mất bộ chấm**
+ngay khi Q2 merge — đây là hệ quả thật, không còn là rủi ro giả định (mục "Rủi ro" cũ đã tự gắn cờ
+đúng chỗ này, giờ có bằng chứng).
 
 ## Đề xuất shape
 
@@ -61,13 +85,15 @@ nới kiểu `str` → `list[str]`, mà còn phải **mở lại đường tham 
 class KbBinding(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    section_role: str          # đổi tên từ `scope` — khớp thẳng Q4=(a), bỏ `kb_id`
-                                 # (dư thừa: "1 KB" = section_role, không còn danh tính riêng)
+    section_role: str                    # đổi tên từ `scope` — khớp thẳng Q4=(a), bỏ `kb_id`
+                                           # (dư thừa: "1 KB" = section_role, không còn danh tính riêng)
+    golden_set_ref: str | None = None     # None => suy ra "kb-{section_role}-auto-v1"
+                                           # str  => override tường minh (bộ viết tay/pre-app#61)
 
 class Recipe(BaseModel):
     ...
     kb_bindings: list[KbBinding] = Field(default_factory=list)   # đổi tên, số nhiều, CÓ THỂ rỗng
-    # golden_set_ref: str  — XOÁ khỏi Recipe
+    # golden_set_ref: str  — XOÁ khỏi Recipe (chuyển vào từng KbBinding, xem trên)
 ```
 
 **`kb_id` bị bỏ, không giữ lại rename.** Từ Q4=(a), danh tính một KB chính là tên `section_role`
@@ -75,24 +101,37 @@ của nó — giữ cả `kb_id` lẫn `section_role` trên cùng một binding 
 loại trùng lặp `/simplify` review vẫn bắt. Nếu Q4 sau này lật sang (b) (`kb.knowledge_bases` có
 danh tính riêng), đó là lúc `kb_id` quay lại — cùng RFC riêng, không phải bây giờ.
 
-**`golden_set_ref` bị xoá khỏi `Recipe`, không đổi thành `list[str]`.** Lý do: `golden_autogen.py:93`
-đã có quy ước đặt tên xác định — `f"kb-{section_role}-auto-v1"`. Với N binding, N bộ golden **suy ra
-được thẳng từ danh sách `kb_bindings`**, không cần lưu song song một field dễ lệch pha với binding
-(gõ tay 2 field cho cùng 1 sự thật là đúng loại lỗi cả `Q2` lẫn Q4 đang tránh). Agent zero-KB
-(`kb_bindings=[]`, Q3 — AIE-2) tự nhiên có 0 bộ golden, không cần giá trị rỗng đặc biệt kiểu
-`golden_set_ref=""`.
+**`golden_set_ref` chuyển vào TỪNG `KbBinding`, optional, mặc định suy ra — sửa 2026-08-26 sau khi
+scan tìm ra mục "Vấn đề #3" ở trên.** Bản gốc RFC định xoá hẳn field này khỏi mọi nơi ("suy ra tại
+chỗ dùng"), nhưng `callisto-golden-30-v1`/`callisto-2.0-golden-30-v1` là bằng chứng thật của một ca
+"tên bộ khác quy ước" mà bản gốc coi là rủi ro giả định — nên field không biến mất, nó **chuyển cấp**
+từ `Recipe` (1 field, bắt buộc) xuống từng `KbBinding` (1 field, optional):
 
-Đây là điểm khác với 2 lựa chọn issue #239 tự đặt ra ban đầu ("`golden_set_ref` chuyển vào trong
-từng binding" hay "giữ ở cấp recipe, đổi `list[str]`") — đề xuất một hướng thứ 3: **không lưu field
-này nữa, suy ra tại chỗ dùng**. Cần AIE-2 xác nhận quy ước đặt tên đủ ổn định để suy ra được (không
-có KB nào cần override tên bộ golden khác quy ước) trước khi chốt hướng này.
+- `golden_set_ref=None` (mặc định) → suy ra `f"kb-{section_role}-auto-v1"` — đường mặc định cho
+  KB thật gắn qua canvas (mọi KB từ `app#61` upload đều có bộ tự sinh đúng quy ước, không cần khai
+  tay). Đây vẫn là hướng chính RFC nhắm tới — override chỉ là lối thoát cho ca cũ, không phải quay
+  lại lưu-mọi-thứ-tường-minh.
+- `golden_set_ref="callisto-golden-30-v1"` (hoặc bất kỳ tên nào) → dùng đúng giá trị đó, không suy
+  ra. Đây là đường tương thích ngược cho `create_recipe`'s default hiện tại và mọi test đang neo vào
+  `callisto-golden-30-v1`/`callisto-2.0-golden-30-v1` (`test_recipe.py:121`, `test_golden_seed.py`,
+  `test_gate2_*`) — chúng tiếp tục sống nguyên, chỉ đổi chỗ khai từ `Recipe.golden_set_ref` sang
+  `KbBinding.golden_set_ref`.
+
+Agent zero-KB (`kb_bindings=[]`, Q3 — AIE-2) vẫn tự nhiên có 0 bộ golden, không cần giá trị rỗng đặc
+biệt kiểu `golden_set_ref=""` — không đổi so với bản gốc.
+
+Đây vẫn là hướng thứ 3 so với 2 lựa chọn issue #239 tự đặt ra ("chuyển vào từng binding" hay "giữ ở
+cấp recipe, đổi `list[str]`") — chỉ khác bản gốc RFC ở chỗ field **không biến mất hoàn toàn**, nó
+optional với default suy-ra. AIE-2 vẫn cần xác nhận: có ca `golden_set_ref` nào KHÁC quy ước ngoài
+2 cái `callisto-*` đã biết không (đặc biệt là dữ liệu tenant thật ngoài demo/seed)? Nếu có, override
+field này đã đỡ được — chỉ cần điền đúng tên, không cần sửa RFC lần nữa.
 
 ## Việc kéo theo theo package
 
 | Package | File | Việc |
 |---|---|---|
 | `contracts` | `recipe.py:86-90,114-129` | Đổi `KbBinding`/`Recipe` như trên. Bump `SCHEMA_VERSION` (rename + required→optional-list là breaking, docstring dòng 8-10 tự ghi rõ). |
-| `workbench` | `recipe.py:62-109` (`create_recipe`) | Mở tham số `kb_bindings: list[KbBinding] \| None` thật (đóng lại đúng thứ workbench#41 đã đóng, nhưng số nhiều thay vì số ít như `create_recipe_d4` cũ). |
+| `workbench` | `recipe.py:62-109` (`create_recipe`) | **Đã mở tham số số ít** (`kb_binding: KbBinding \| None`, PR #50, 2026-08-26). Còn lại: đổi số ít → `kb_bindings: list[KbBinding] \| None` khi Q2 merge — chữ ký đã có tiền lệ optional-param nên đổi tiếp không phải mở đường lần đầu. |
 | `workbench` | `validator.py:139-160` (`agent_shape_lint`) | `kb_binding.kb_id_non_blank`/`kb_binding.scope_non_blank`/`golden_set_ref.non_blank` (3 luật) → thay bằng luật trên `kb_bindings` (mỗi phần tử `section_role` không rỗng, không trùng `section_role` giữa các binding). |
 | `engine` | `fence.py::fenced_kb_params` | **1 chỗ duy nhất** cần vá cho cả `interpreter.run()` lẫn `agent_loop.run_agent_loop()` (đã factor chung từ engine#33 phase 2-3): đổi override-toàn-bộ thành giao — `section_roles = [r for r in session_context.system_roles if r in {b.section_role for b in recipe.kb_bindings}]`. Cần thêm tham số `recipe`/binding scopes vào chữ ký hàm (hiện chỉ nhận `params`+`session_context`). |
 | `engine` | `interpreter.py:183-184` (docstring) | Câu trích `_parse_kb_scope` đã trỏ tới hàm bị xoá 2026-08-24 (workbench#41/kit#218) — doc-drift có sẵn từ trước RFC này, dọn cùng lúc cho khỏi trỏ chết lần 2. |
@@ -108,9 +147,12 @@ có KB nào cần override tên bộ golden khác quy ước) trước khi chố
 - **`recipe_hash`**: đổi shape `Recipe` sẽ đổi hash mọi recipe hash lại từ payload mới — cùng loại
   rủi ro `AgentConfig.system_prompt` rename đã gặp (`recipe.py:67-75`, DEC-2), `publish.py::rollback()`
   cần giữ `history_recipe_hash` cũ nguyên vẹn, không recompute.
-- **Đề xuất "suy ra `golden_set_ref` thay vì lưu"** là phần rủi ro nhất trong RFC này — nếu sai (có
-  ca cần override tên bộ khác quy ước `kb-{role}-auto-v1`), phải quay lại phương án lưu field tường
-  minh. Xin ý kiến AIE-2 trước khi implement, đừng chỉ ký cho qua.
+- **Đề xuất "suy ra `golden_set_ref` thay vì lưu"** — **đã sửa 2026-08-26**: field không xoá hẳn nữa,
+  chuyển thành `KbBinding.golden_set_ref: str | None = None` (suy ra khi `None`, override khi có giá
+  trị). Lý do sửa: scan tìm ra `callisto-golden-30-v1`/`callisto-2.0-golden-30-v1` là default đang
+  chạy production, không theo quy ước — bản gốc coi đây là rủi ro giả định, giờ là xung đột thật (mục
+  "Vấn đề #3"). Còn lại cần AIE-2 xác nhận: có `golden_set_ref` nào khác quy ước NGOÀI 2 cái đã biết
+  không (tenant thật, không phải demo/seed) — nếu có, override field đã đỡ được, không cần sửa RFC.
 
 ## Cần ký
 
@@ -122,4 +164,4 @@ có KB nào cần override tên bộ golden khác quy ước) trước khi chố
 | AIE-1 — Trần Bá Đạt | ✅ tác giả — đề xuất |
 | DE — Nguyễn Đông Anh | ⬜ chưa ký |
 | SWE — Thiệu Quang Minh | ⬜ chưa ký |
-| AIE-2 — Lưu Tiến Duy | ⬜ chưa ký — đặc biệt xin ý kiến mục "suy ra `golden_set_ref`" ở trên |
+| AIE-2 — Lưu Tiến Duy | ⬜ chưa ký — mục "suy ra `golden_set_ref`" đã có override field giải xung đột `callisto-*`; cần xác nhận không còn ca nào khác quy ước ngoài 2 cái đã biết |
