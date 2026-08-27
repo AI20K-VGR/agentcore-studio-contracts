@@ -30,7 +30,15 @@ from studio_contracts.recipe import (
     Recipe,
     ScorecardThreshold,
 )
-from studio_contracts.scorecard import Aggregate, CaseResult, Gate, GateThreshold, Judge, Scorecard
+from studio_contracts.scorecard import (
+    Aggregate,
+    CaseOutcome,
+    CaseResult,
+    Gate,
+    GateThreshold,
+    Judge,
+    Scorecard,
+)
 from studio_contracts.trace import Tokens, TraceEvent
 
 SCHEMA_VERSION = "0.3.0-draft"
@@ -39,6 +47,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "AgentConfig",
     "Aggregate",
+    "CaseOutcome",
     "CaseResult",
     "cost_of",
     "Dag",
