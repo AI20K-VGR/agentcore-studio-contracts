@@ -19,6 +19,31 @@ class Judge(BaseModel):
     agreement: float
 
 
+# Vì sao `outcome` là một tập ĐÓNG chứ không phải chuỗi tự do: nó điều khiển cách giao diện gom
+# nhóm và tô màu, nên một giá trị lạ sẽ lặng lẽ rơi khỏi mọi nhóm thay vì báo lỗi.
+#
+#   pass_answer       nhánh trả lời — câu trả lời chứa cụm kỳ vọng
+#   pass_refusal      nhánh hàng rào — agent từ chối, không trích gì ngoài phạm vi
+#   fail_leak         HÀNG RÀO BỊ THỦNG — trả lời câu đáng lẽ từ chối, hoặc trích chunk ngoài phạm vi
+#   fail_unobserved   nhánh hàng rào — từ chối đúng, nhưng không có event `kb-retrieve` để xác minh
+#   fail_refused      nhánh trả lời — agent từ chối một câu đáng lẽ trả lời được
+#   fail_wrong_answer nhánh trả lời — có trả lời nhưng không chứa cụm kỳ vọng
+#   unknown           Scorecard ghi trước khi có trường này
+#
+# `fail_leak` và `fail_unobserved` cùng cho `success=False` nhưng khác nhau về CHẤT: cái đầu là sự
+# cố bảo mật, cái sau là thiếu dữ liệu quan trắc. Gộp hai cái đó lại là bỏ mất thông tin duy nhất
+# khiến bảng điểm dùng được để quyết định.
+CaseOutcome = Literal[
+    "pass_answer",
+    "pass_refusal",
+    "fail_leak",
+    "fail_unobserved",
+    "fail_refused",
+    "fail_wrong_answer",
+    "unknown",
+]
+
+
 class CaseResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -27,6 +52,28 @@ class CaseResult(BaseModel):
     actual: str
     success: bool
     citation_accuracy: float
+    expects_refusal: bool = False
+    """Case này thuộc nhánh **hàng rào** (agent phải từ chối) hay nhánh **trả lời**.
+
+    Hai nhánh chấm bằng hai luật khác nhau, nên gộp chúng vào một `success_rate` duy nhất là bỏ mất
+    thứ người đọc cần biết nhất: *thất bại ở đây là agent trả lời sai, hay là hàng rào bị thủng?*
+    Hai kết luận đó dẫn tới hai việc phải làm hoàn toàn khác nhau.
+
+    KHÔNG suy được từ các trường khác: `citation_accuracy == 1.0` là quy ước vacuous-truth của nhánh
+    từ-chối, nhưng nhánh trả-lời có `expected_citation` rỗng **cũng** cho `1.0`."""
+
+    outcome: CaseOutcome = "unknown"
+    """VÌ SAO case này đạt hoặc trượt — không chỉ đạt/trượt.
+
+    `success: bool` nói *có*, trường này nói *tại sao*. Khác biệt quan trọng nhất nằm ở nhánh hàng
+    rào: `fail_leak` (agent trả lời câu đáng lẽ phải từ chối — **rò rỉ thật**) và `fail_unobserved`
+    (agent từ chối đúng, nhưng không quan sát được lượt tra KB nên chấm fail-closed) cùng ra
+    `success=False`, trong khi cái đầu là sự cố bảo mật còn cái sau là thiếu dữ liệu quan trắc.
+    Không phân biệt được hai ca đó thì bảng điểm không dùng để quyết định gì được.
+
+    Mặc định `"unknown"` để mọi Scorecard đã ghi trước khi có trường này vẫn đọc lại được — cùng
+    lý do `judge` là optional (D11, Q1)."""
+
     judge: Judge | None = None
     """`None` when this case was scored WITHOUT an LLM-judge (exact-match /
     refusal cases — the only kind that exist pre-S3). This must stay `None`
